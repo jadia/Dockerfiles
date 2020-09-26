@@ -4,8 +4,8 @@ on:
   push:
     branches:
       - master
-#   paths:
-#     - '**/VERSION'
+    paths:
+      - '**/VERSION'
 jobs:
   push:
     runs-on: ubuntu-latest
@@ -14,11 +14,9 @@ jobs:
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
-        env:
-          DOCKER_REGISTRY_URL: ghcr.io
-          REPOSITORY: jadia
-          USERNAME: jadia
 
+#  Environment variables does not work across differnet jobs
+# https://github.com/actions/starter-workflows/issues/68#issuecomment-642514933
       - name: environment
         run: |
           echo "export DOCKER_REGISTRY_URL=ghcr.io" > ~/.bashrc
@@ -32,7 +30,9 @@ jobs:
 
       - name: Build and push the images
         run: |
+          # Using the env var: https://github.com/actions/starter-workflows/issues/68#issuecomment-642514933
           source ~/.bashrc
+          # The image is only build if changes is made in VERSION file of the application
           for versionFilePath in $(git diff-tree --no-commit-id --name-only -r ${{ github.sha }} ${{ github.event.before }} | grep "VERSION");
           do
             folder=${versionFilePath%"/VERSION"}
