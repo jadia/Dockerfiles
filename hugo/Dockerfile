@@ -1,7 +1,8 @@
 # Source: https://github.com/jguyomard/docker-hugo/blob/master/Dockerfile
 FROM alpine:3.12
 
-MAINTAINER JG <julien@mangue.eu>
+#MAINTAINER JG <julien@mangue.eu> # Original author
+MAINTAINER Nitish <nitish@jadia.dev>
 
 RUN apk add --no-cache \
     curl \
@@ -9,7 +10,7 @@ RUN apk add --no-cache \
     openssh-client \
     rsync
 
-ENV VERSION 0.55.0
+ENV VERSION 0.74.2
 RUN mkdir -p /usr/local/src \
     && cd /usr/local/src \
 
