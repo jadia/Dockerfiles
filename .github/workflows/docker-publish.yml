@@ -20,7 +20,8 @@ jobs:
           USERNAME: jadia
 
       - name: Log into registry
-        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login $DOCKER_REGISTRY_URL -u $USERNAME --password-stdin
+#       run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login $DOCKER_REGISTRY_URL -u $USERNAME --password-stdin
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login ghcr.io -u jadia --password-stdin
 
       - name: Build and push the images
         run: |
