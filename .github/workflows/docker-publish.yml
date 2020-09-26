@@ -21,9 +21,9 @@ jobs:
 
       - name: environment
           run: |
-          echo "export DOCKER_REGISTRY_URL=ghcr.io" > ~/.bashrc
-          echo "export REPOSITORY=jadia" >> ~/.bashrc
-          echo "export USERNAME=jadia" >> ~/.bashrc
+            echo "export DOCKER_REGISTRY_URL=ghcr.io" > ~/.bashrc
+            echo "export REPOSITORY=jadia" >> ~/.bashrc
+            echo "export USERNAME=jadia" >> ~/.bashrc
 
 
       - name: Log into registry
