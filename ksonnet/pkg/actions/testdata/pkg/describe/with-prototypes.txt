@@ -1,0 +1,8 @@
+LIBRARY NAME:
+apache
+
+DESCRIPTION:
+description
+
+PROTOTYPES:
+  proto1 - short description

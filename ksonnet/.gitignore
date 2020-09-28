@@ -1,0 +1,10 @@
+/kubecfg
+/ks
+/ks.exe
+/cmd/ks/debug
+
+debug.test
+
+/_output
+/dist
+

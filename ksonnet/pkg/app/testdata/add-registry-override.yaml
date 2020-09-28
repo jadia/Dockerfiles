@@ -1,0 +1,6 @@
+apiVersion: 0.3.0
+kind: ksonnet.io/app-override
+registries:
+  new:
+    protocol: ""
+    uri: ""

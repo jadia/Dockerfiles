@@ -1,0 +1,3 @@
+COMPONENT    PARAM    ENV1 ENV2
+=========    =====    ==== ====
+guestbook-ui replicas 4    3

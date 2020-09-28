@@ -1,0 +1,11 @@
+apiVersion: 0.3.0
+environments:
+  b:
+    destination: null
+    k8sVersion: ""
+    path: ""
+kind: ksonnet.io/app-override
+registries:
+  b:
+    protocol: ""
+    uri: ""

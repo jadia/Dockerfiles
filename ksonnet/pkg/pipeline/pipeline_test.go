@@ -1,0 +1,306 @@
+// Copyright 2018 The ksonnet authors
+//
+//
+//    Licensed under the Apache License, Version 2.0 (the "License");
+//    you may not use this file except in compliance with the License.
+//    You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+//    Unless required by applicable law or agreed to in writing, software
+//    distributed under the License is distributed on an "AS IS" BASIS,
+//    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//    See the License for the specific language governing permissions and
+//    limitations under the License.
+
+package pipeline
+
+import (
+	"io/ioutil"
+	"path/filepath"
+	"testing"
+
+	"github.com/ksonnet/ksonnet-lib/ksonnet-gen/astext"
+	"github.com/ksonnet/ksonnet/pkg/app"
+	appmocks "github.com/ksonnet/ksonnet/pkg/app/mocks"
+	"github.com/ksonnet/ksonnet/pkg/component"
+	cmocks "github.com/ksonnet/ksonnet/pkg/component/mocks"
+	"github.com/ksonnet/ksonnet/pkg/metadata"
+	"github.com/ksonnet/ksonnet/pkg/util/jsonnet"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+)
+
+func TestPipeline_Namespaces(t *testing.T) {
+	withPipeline(t, func(p *Pipeline, m *cmocks.Manager, a *appmocks.App) {
+		namespaces := []component.Module{}
+		m.On("Modules", p.app, "default").Return(namespaces, nil)
+
+		got, err := p.Modules()
+		require.NoError(t, err)
+
+		require.Equal(t, namespaces, got)
+	})
+}
+
+func TestPipeline_EnvParameters(t *testing.T) {
+	withPipeline(t, func(p *Pipeline, m *cmocks.Manager, a *appmocks.App) {
+		module := &cmocks.Module{}
+		module.On("ResolvedParams", "default").Return("{}", nil)
+
+		namespaces := []component.Module{module}
+		m.On("Modules", p.app, "default").Return(namespaces, nil)
+		m.On("Module", p.app, "/").Return(module, nil)
+		a.On("EnvironmentParams", "default").Return("{}", nil)
+
+		env := &app.EnvironmentConfig{Path: "default"}
+		a.On("Environment", "default").Return(env, nil)
+
+		got, err := p.EnvParameters("/", true)
+		require.NoError(t, err)
+
+		require.Equal(t, "{ }\n", got)
+	})
+}
+
+func TestPipeline_EnvParameters_inherited(t *testing.T) {
+	withPipeline(t, func(p *Pipeline, m *cmocks.Manager, a *appmocks.App) {
+		module := &cmocks.Module{}
+		module.On("ResolvedParams", "default").Return("{}", nil)
+
+		c := &cmocks.Component{}
+		c.On("Name", true).Return("app")
+		module.On("Components").Return([]component.Component{c}, nil)
+
+		namespaces := []component.Module{module}
+		m.On("Modules", p.app, "default").Return(namespaces, nil)
+		m.On("Module", p.app, "/").Return(module, nil)
+		a.On("EnvironmentParams", "default").Return("{}", nil)
+
+		env := &app.EnvironmentConfig{Path: "default"}
+		a.On("Environment", "default").Return(env, nil)
+
+		got, err := p.EnvParameters("/", false)
+		require.NoError(t, err)
+
+		require.Equal(t, "{ }\n", got)
+	})
+}
+
+func TestPipeline_Components(t *testing.T) {
+	withPipeline(t, func(p *Pipeline, m *cmocks.Manager, a *appmocks.App) {
+		cpnt := &cmocks.Component{}
+		components := []component.Component{cpnt}
+
+		module := component.NewModule(p.app, "/")
+		modules := []component.Module{module}
+		m.On("Modules", p.app, "default").Return(modules, nil)
+		m.On("Module", p.app, "/").Return(module, nil)
+		a.On("EnvironmentParams", "default").Return("{}", nil)
+		m.On("Components", p.app, "/").Return(components, nil)
+
+		got, err := p.Components(nil)
+		require.NoError(t, err)
+
+		require.Equal(t, components, got)
+	})
+}
+
+func mockComponent(name string) *cmocks.Component {
+	c := &cmocks.Component{}
+	c.On("Name", true).Return(name)
+	return c
+}
+
+func TestPipeline_Components_filtered(t *testing.T) {
+	withPipeline(t, func(p *Pipeline, m *cmocks.Manager, a *appmocks.App) {
+
+		cpnt1 := mockComponent("cpnt1")
+		cpnt2 := mockComponent("cpnt2")
+		components := []component.Component{cpnt1, cpnt2}
+
+		module := component.NewModule(p.app, "/")
+		modules := []component.Module{module}
+		m.On("Modules", p.app, "default").Return(modules, nil)
+		m.On("Module", p.app, "/").Return(module, nil)
+		a.On("EnvironmentParams", "default").Return("{}", nil)
+		m.On("Components", p.app, "/").Return(components, nil)
+
+		got, err := p.Components([]string{"cpnt1"})
+		require.NoError(t, err)
+
+		expected := []component.Component{cpnt1}
+
+		require.Equal(t, expected, got)
+	})
+}
+
+func TestPipeline_Objects(t *testing.T) {
+	withPipeline(t, func(p *Pipeline, m *cmocks.Manager, a *appmocks.App) {
+		u := []*unstructured.Unstructured{
+			{
+				Object: map[string]interface{}{
+					"apiVersion": "v1",
+					"kind":       "Service",
+					"metadata": map[string]interface{}{
+						"labels": map[string]interface{}{
+							metadata.LabelComponent: "service",
+						},
+						"name": "my-service",
+					},
+					"spec": map[string]interface{}{
+						"ports": []interface{}{
+							map[string]interface{}{
+								"port":       int64(80),
+								"protocol":   "TCP",
+								"targetPort": int64(80),
+							},
+						},
+					},
+				},
+			},
+		}
+
+		module := &cmocks.Module{}
+		module.On("Name").Return("")
+		object := &astext.Object{}
+		componentMap := map[string]string{"service": "yaml"}
+		module.On("Render", "default").Return(object, componentMap, nil)
+		module.On("ResolvedParams", "default").Return("", nil)
+
+		modules := []component.Module{module}
+		m.On("Modules", p.app, "default").Return(modules, nil)
+		m.On("Module", p.app, "/").Return(module, nil)
+		a.On("EnvironmentParams", "default").Return("{}", nil)
+
+		env := &app.EnvironmentConfig{Path: "default"}
+		a.On("Environment", "default").Return(env, nil)
+
+		serviceJSON, err := ioutil.ReadFile(filepath.Join("testdata", "components.json"))
+		require.NoError(t, err)
+		p.evaluateEnvFn = func(_ app.App, envName, input, params string, opts ...jsonnet.VMOpt) (string, error) {
+			return string(serviceJSON), nil
+		}
+
+		p.evaluateEnvParamsFn = func(_ app.App, paramsPath, paramData, envName, moduleName string) (string, error) {
+			return `{"components": {}}`, nil
+		}
+
+		got, err := p.Objects(nil)
+		require.NoError(t, err)
+
+		require.Equal(t, u, got)
+	})
+}
+
+func TestPipeline_YAML(t *testing.T) {
+	withPipeline(t, func(p *Pipeline, m *cmocks.Manager, a *appmocks.App) {
+		p.buildObjectsFn = func(_ *Pipeline, filter []string) ([]*unstructured.Unstructured, error) {
+			u := []*unstructured.Unstructured{
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "v1",
+						"kind":       "Service",
+						"metadata": map[string]interface{}{
+							"name": "my-service",
+						},
+						"spec": map[string]interface{}{
+							"ports": []interface{}{
+								map[string]interface{}{
+									"port":       int64(80),
+									"protocol":   "TCP",
+									"targetPort": int64(80),
+								},
+							},
+						},
+					},
+				},
+			}
+
+			return u, nil
+		}
+
+		r, err := p.YAML(nil)
+		require.NoError(t, err)
+
+		got, err := ioutil.ReadAll(r)
+		require.NoError(t, err)
+
+		expected, err := ioutil.ReadFile(filepath.Join("testdata", "service.yaml"))
+		require.NoError(t, err)
+
+		require.Equal(t, string(expected), string(got))
+	})
+}
+
+func Test_upgradeParams(t *testing.T) {
+	in := `local params = import "../../components/params.libsonnet";`
+	expected := `local params = std.extVar("__ksonnet/params");`
+
+	got := upgradeParams("default", in)
+	require.Equal(t, expected, got)
+}
+
+func Test_stubModule(t *testing.T) {
+	cases := []struct {
+		name     string
+		module   func() *cmocks.Module
+		expected string
+		isErr    bool
+	}{
+		{
+			name: "valid",
+			module: func() *cmocks.Module {
+				module := &cmocks.Module{}
+
+				c := &cmocks.Component{}
+				c.On("Name", true).Return("app")
+				module.On("Components").Return([]component.Component{c}, nil)
+
+				return module
+			},
+			expected: `{"components":{"app":{}}}`,
+		},
+		{
+			name: "invalid components",
+			module: func() *cmocks.Module {
+				module := &cmocks.Module{}
+				module.On("Components").Return(nil, errors.New("failed"))
+
+				return module
+			},
+			isErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NotNil(t, tc.module)
+			module := tc.module()
+
+			got, err := stubModule(module)
+			if tc.isErr {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+
+			assert.Equal(t, tc.expected, got)
+		})
+	}
+}
+
+func withPipeline(t *testing.T, fn func(p *Pipeline, m *cmocks.Manager, a *appmocks.App)) {
+	a := &appmocks.App{}
+	a.On("Root").Return("/")
+	envName := "default"
+
+	manager := &cmocks.Manager{}
+
+	p := New(a, envName, OverrideManager(manager))
+
+	fn(p, manager, a)
+}
