@@ -2,6 +2,20 @@
 
 **This directory is just a clone of current depricated ksonnet project. There is no ksonnet release after 2018 and all the changes in 2019(before the project was archived) are not present in those releases. Hence the need of this image**
 
+### Getting the ksonnet binary
+
+Create the container
+
+```bash
+docker run --rm -d -ti --name ks-dev ghcr.io/jadia/dockerfiles/ksonnet sleep 1000
+```
+
+Copy `ks` binary from the container to the local machine
+
+```bash
+docker cp ks-dev:/bin/ks ./ks-dev
+```
+
 ---
 
 # ksonnet
